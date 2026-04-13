@@ -204,7 +204,7 @@ def api_cluster():
         })
     except Exception as exc:
         logger.error("Clustering error: %s", exc, exc_info=True)
-        return jsonify({"success": False, "error": str(exc)}), 500
+        return jsonify({"success": False, "error": "Internal server error"}), 500
 
 
 # ── API: deduplicate ──────────────────────────────────────────────────────────
