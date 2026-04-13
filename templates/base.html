@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}ClusterIQ{% endblock %} — Alert Clustering Engine</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+<div class="app-container">
+
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <a href="/" class="sidebar-logo">
+                <div class="logo-icon">CIQ</div>
+                <div>
+                    <div class="logo-text">ClusterIQ</div>
+                    <div class="logo-version">v1.0.0</div>
+                </div>
+            </a>
+        </div>
+
+        <nav class="sidebar-nav">
+            <div class="nav-section">
+                <div class="nav-section-title">Analyze</div>
+                <a href="/" class="nav-link {% if request.path == '/' %}active{% endif %}">
+                    <span class="nav-icon">🔍</span> Cluster Alerts
+                </a>
+                <a href="/sessions" class="nav-link {% if request.path == '/sessions' %}active{% endif %}">
+                    <span class="nav-icon">📁</span> Session Library
+                </a>
+            </div>
+
+            <div class="nav-section">
+                <div class="nav-section-title">Verdict Legend</div>
+                <div class="legend-item">
+                    <span class="dot dot-escalate"></span>
+                    <span>Escalate — act now</span>
+                </div>
+                <div class="legend-item">
+                    <span class="dot dot-review"></span>
+                    <span>Review — needs check</span>
+                </div>
+                <div class="legend-item">
+                    <span class="dot dot-suppressed"></span>
+                    <span>Suppressed — baseline noise</span>
+                </div>
+            </div>
+
+            <div class="nav-section">
+                <div class="nav-section-title">Suite</div>
+                <a href="http://127.0.0.1:5000" class="nav-link external" target="_blank">
+                    <span class="nav-icon">🔗</span> SigmaForge (5000)
+                </a>
+                <a href="http://127.0.0.1:5006" class="nav-link external" target="_blank">
+                    <span class="nav-icon">🔗</span> LogNorm (5006)
+                </a>
+                <a href="http://127.0.0.1:5007" class="nav-link external" target="_blank">
+                    <span class="nav-icon">🔗</span> HuntForge (5007)
+                </a>
+                <a href="http://127.0.0.1:5008" class="nav-link external" target="_blank">
+                    <span class="nav-icon">🔗</span> DriftWatch (5008)
+                </a>
+            </div>
+        </nav>
+
+        <div class="sidebar-footer">
+            <div class="sidebar-status">
+                <div class="status-dot online" id="healthDot"></div>
+                <span>ClusterIQ API</span>
+            </div>
+        </div>
+    </aside>
+
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+</div>
+
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+{% block extra_scripts %}{% endblock %}
+
+<script>
+fetch('/api/health')
+    .then(r => r.json())
+    .then(d => {
+        document.getElementById('healthDot').className =
+            d.status === 'ok' ? 'status-dot online' : 'status-dot offline';
+    })
+    .catch(() => {
+        document.getElementById('healthDot').className = 'status-dot offline';
+    });
+</script>
+</body>
+</html>

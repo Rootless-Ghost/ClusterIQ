@@ -1,0 +1,20 @@
+# ClusterIQ Configuration
+# Copy this file to config.yaml and adjust as needed.
+
+host: 127.0.0.1
+port: 5009
+debug: false
+
+db_path: ./clusteriq.db
+
+clustering:
+  default_threshold: 0.75        # similarity threshold for fuzzy merging (0.5–1.0)
+  default_fields:                # fields used to fingerprint alerts
+    - process.name
+    - event.action
+    - network.destination.ip
+  max_alerts: 50000              # hard cap on input alert count
+  auto_save:  true               # persist every clustering session
+
+integrations:
+  lognorm_url: http://127.0.0.1:5006

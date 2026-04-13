@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block title %}Session Library{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">
+        <span class="title-icon">📁</span>
+        Session Library
+    </h1>
+    <p class="page-subtitle">Browse and manage saved clustering sessions.</p>
+</div>
+
+<div class="card filter-card">
+    <div class="card-body">
+        <div class="filter-row">
+            <input type="text" id="searchInput" class="form-input filter-input"
+                   placeholder="Search sessions by label…">
+            <button class="btn btn-secondary" id="clearBtn">Clear</button>
+        </div>
+        <div class="filter-stats">
+            <span id="resultCount" class="result-count">Loading…</span>
+            <button class="btn btn-danger btn-sm" id="clearAllBtn">🗑 Clear All</button>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div id="loadingState" class="loading-state">
+        <div class="spinner"></div>
+        <span>Loading sessions…</span>
+    </div>
+    <div id="emptyState" class="empty-state hidden">
+        <div class="empty-icon">📂</div>
+        <h3>No sessions saved yet</h3>
+        <p>Run a clustering analysis from the <a href="/">main page</a> to get started.</p>
+    </div>
+    <table id="sessionTable" class="data-table hidden">
+        <thead>
+            <tr>
+                <th>Label</th>
+                <th>Alerts</th>
+                <th>Clusters</th>
+                <th>Escalate</th>
+                <th>Review</th>
+                <th>Suppressed</th>
+                <th>Noise Reduction</th>
+                <th>Created</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="sessionTableBody"></tbody>
+    </table>
+</div>
+
+<div id="pagination" class="pagination hidden">
+    <button class="btn btn-sm btn-secondary" id="prevPageBtn">← Prev</button>
+    <span id="pageInfo" class="page-info"></span>
+    <button class="btn btn-sm btn-secondary" id="nextPageBtn">Next →</button>
+</div>
+
+<div id="deleteModal" class="modal-overlay hidden">
+    <div class="modal">
+        <div class="modal-header"><h3>Delete Session</h3></div>
+        <div class="modal-body">
+            <p>Are you sure you want to delete this session?</p>
+            <p class="modal-detail" id="deleteDetail"></p>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" id="cancelDeleteBtn">Cancel</button>
+            <button class="btn btn-danger"    id="confirmDeleteBtn">Delete</button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let currentPage = 1, totalPages = 1, pendingDelete = null;
+const searchInput = document.getElementById('searchInput');
+
+function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function loadSessions(page = 1) {
+    const q = new URLSearchParams({ page, per_page: 25, search: searchInput.value.trim() });
+    document.getElementById('loadingState').classList.remove('hidden');
+    document.getElementById('emptyState').classList.add('hidden');
+    document.getElementById('sessionTable').classList.add('hidden');
+
+    try {
+        const resp = await fetch(`/api/sessions?${q}`);
+        const data = await resp.json();
+        document.getElementById('loadingState').classList.add('hidden');
+
+        if (!data.success || !data.items.length) {
+            document.getElementById('emptyState').classList.remove('hidden');
+            document.getElementById('resultCount').textContent = '0 sessions';
+            document.getElementById('pagination').classList.add('hidden');
+            return;
+        }
+
+        currentPage = data.page;
+        totalPages  = data.pages;
+        document.getElementById('resultCount').textContent =
+            `${data.total} session${data.total !== 1 ? 's' : ''}`;
+
+        const tbody = document.getElementById('sessionTableBody');
+        tbody.innerHTML = '';
+        data.items.forEach(s => {
+            const tr      = document.createElement('tr');
+            const nrPct   = (s.noise_reduction_pct || 0).toFixed(1);
+            const created = s.created_at ? new Date(s.created_at).toLocaleDateString() : '—';
+            tr.innerHTML = `
+                <td class="label-cell">${esc(s.label || '—')}</td>
+                <td class="num-cell">${(s.original_count || 0).toLocaleString()}</td>
+                <td class="num-cell">${s.cluster_count}</td>
+                <td class="num-cell escalate-cell">${(s.escalate_count || 0).toLocaleString()}</td>
+                <td class="num-cell review-cell">${(s.review_count || 0).toLocaleString()}</td>
+                <td class="num-cell suppressed-cell">${(s.suppressed_count || 0).toLocaleString()}</td>
+                <td class="num-cell">${nrPct}%</td>
+                <td class="date-cell">${created}</td>
+                <td class="actions-cell">
+                    <a href="/session/${esc(s.id)}" class="btn btn-xs btn-primary">View</a>
+                    <button class="btn btn-xs btn-secondary" onclick="exportSession('${esc(s.id)}','json')">JSON</button>
+                    <button class="btn btn-xs btn-secondary" onclick="exportSession('${esc(s.id)}','markdown')">MD</button>
+                    <button class="btn btn-xs btn-danger" onclick="promptDelete('${esc(s.id)}','${esc(s.label||'')}')">✕</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        document.getElementById('sessionTable').classList.remove('hidden');
+        const pag = document.getElementById('pagination');
+        if (totalPages > 1) {
+            pag.classList.remove('hidden');
+            document.getElementById('pageInfo').textContent = `Page ${currentPage} of ${totalPages}`;
+            document.getElementById('prevPageBtn').disabled = currentPage <= 1;
+            document.getElementById('nextPageBtn').disabled = currentPage >= totalPages;
+        } else {
+            pag.classList.add('hidden');
+        }
+    } catch (err) {
+        document.getElementById('loadingState').classList.add('hidden');
+        document.getElementById('emptyState').classList.remove('hidden');
+    }
+}
+
+function exportSession(id, fmt) {
+    window.location.href = `/api/session/${id}/export?format=${fmt}`;
+}
+
+function promptDelete(id, label) {
+    pendingDelete = id;
+    document.getElementById('deleteDetail').textContent = label || id;
+    document.getElementById('deleteModal').classList.remove('hidden');
+}
+
+document.getElementById('cancelDeleteBtn').addEventListener('click', () => {
+    document.getElementById('deleteModal').classList.add('hidden');
+    pendingDelete = null;
+});
+
+document.getElementById('confirmDeleteBtn').addEventListener('click', async () => {
+    if (!pendingDelete) return;
+    await fetch(`/api/session/${pendingDelete}`, { method: 'DELETE' });
+    document.getElementById('deleteModal').classList.add('hidden');
+    pendingDelete = null;
+    loadSessions(currentPage);
+});
+
+document.getElementById('clearAllBtn').addEventListener('click', () => {
+    if (!confirm('Delete ALL saved sessions? This cannot be undone.')) return;
+    fetch('/api/sessions?per_page=200').then(r => r.json()).then(async data => {
+        for (const s of data.items) await fetch(`/api/session/${s.id}`, { method: 'DELETE' });
+        loadSessions(1);
+    });
+});
+
+document.getElementById('clearBtn').addEventListener('click', () => {
+    searchInput.value = '';
+    loadSessions(1);
+});
+
+document.getElementById('prevPageBtn').addEventListener('click', () => { if (currentPage > 1) loadSessions(currentPage - 1); });
+document.getElementById('nextPageBtn').addEventListener('click', () => { if (currentPage < totalPages) loadSessions(currentPage + 1); });
+
+let timer;
+searchInput.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => loadSessions(1), 400); });
+
+loadSessions(1);
+</script>
+{% endblock %}

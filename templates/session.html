@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Session — {{ session.label }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <a href="/sessions" class="back-link">← Back to Sessions</a>
+    <h1 class="page-title">
+        <span class="title-icon">🔍</span>
+        {{ session.label or "Cluster Session" }}
+    </h1>
+    <div class="page-meta">
+        <span class="meta-badge">{{ session.cluster_count }} clusters</span>
+        <span class="meta-badge">{{ session.original_count | default(0) | int }} alerts</span>
+        <span class="meta-badge">{{ "%.1f"|format(session.noise_reduction_pct or 0) }}% noise reduction</span>
+        <span class="meta-badge">threshold {{ "%.2f"|format(session.similarity_threshold or 0.75) }}</span>
+        <span class="meta-date">{{ session.analyzed_at[:19].replace('T',' ') if session.analyzed_at else '' }}</span>
+    </div>
+</div>
+
+<!-- Export bar -->
+<div class="export-bar card">
+    <span class="export-label">Export:</span>
+    <a href="/api/session/{{ session.id }}/export?format=json"     class="btn btn-sm btn-secondary">⬇ JSON</a>
+    <a href="/api/session/{{ session.id }}/export?format=markdown" class="btn btn-sm btn-secondary">⬇ Markdown</a>
+    <button class="btn btn-sm btn-outline" onclick="window.print()">🖨 Print</button>
+</div>
+
+<!-- Summary bar -->
+<div class="summary-bar card">
+    <div class="summary-stat">
+        <div class="stat-value">{{ session.original_count | default(0) }}</div>
+        <div class="stat-label">Original Alerts</div>
+    </div>
+    <div class="summary-divider"></div>
+    <div class="summary-stat">
+        <div class="stat-value">{{ session.cluster_count }}</div>
+        <div class="stat-label">Clusters</div>
+    </div>
+    <div class="summary-divider"></div>
+    <div class="summary-stat stat-escalate">
+        <div class="stat-value">{{ session.escalate_count | default(0) }}</div>
+        <div class="stat-label">Escalate</div>
+    </div>
+    <div class="summary-divider"></div>
+    <div class="summary-stat stat-review">
+        <div class="stat-value">{{ session.review_count | default(0) }}</div>
+        <div class="stat-label">Review</div>
+    </div>
+    <div class="summary-divider"></div>
+    <div class="summary-stat stat-suppressed">
+        <div class="stat-value">{{ session.suppressed_count | default(0) }}</div>
+        <div class="stat-label">Suppressed</div>
+    </div>
+    <div class="summary-divider"></div>
+    <div class="summary-stat">
+        <div class="stat-value">{{ "%.1f"|format(session.noise_reduction_pct or 0) }}%</div>
+        <div class="stat-label">Noise Reduction</div>
+    </div>
+</div>
+
+<!-- Cluster-by info -->
+{% if session.cluster_by %}
+<div class="card cluster-by-card">
+    <div class="card-body cluster-by-body">
+        <span class="cluster-by-label">Clustered by:</span>
+        {% for f in session.cluster_by %}
+        <span class="field-tag">{{ f }}</span>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Verdict filter bar -->
+<div class="verdict-filter-bar card">
+    <span class="filter-label">Show:</span>
+    <button class="vfilter-btn active" data-verdict="all">All</button>
+    <button class="vfilter-btn" data-verdict="escalate">🔴 Escalate</button>
+    <button class="vfilter-btn" data-verdict="review">🟡 Review</button>
+    <button class="vfilter-btn" data-verdict="suppressed">⚪ Suppressed</button>
+</div>
+
+<!-- Cluster cards -->
+<div class="cluster-grid" id="clusterGrid">
+{% for c in session.clusters %}
+    {% set ctx = c.context_scores or {} %}
+    <div class="cluster-card cluster-{{ c.noise_verdict }}" data-verdict="{{ c.noise_verdict }}"
+         onclick='openClusterModal({{ c | tojson }})'>
+        <div class="cluster-card-top">
+            <div class="cluster-id-badge">{{ c.cluster_id }}</div>
+            <div class="verdict-pill verdict-{{ c.noise_verdict }}">{{ c.noise_verdict }}</div>
+            {% if ctx.ti_tags %}<span class="ti-tag-badge">TI</span>{% endif %}
+            {% if ctx.has_critical_asset %}<span class="crit-badge">CRIT</span>{% endif %}
+        </div>
+        <div class="cluster-fp">
+            {% for k, v in c.fingerprint.items() %}
+            <div class="fp-row"><span class="fp-key">{{ k }}</span><span class="fp-val">{{ v[:40] }}</span></div>
+            {% else %}
+            <div class="fp-row fp-empty">(no fingerprint fields)</div>
+            {% endfor %}
+        </div>
+        <div class="cluster-stats">
+            <span class="cstat">{{ c.size }} alerts</span>
+            <span class="cstat">sim {{ "%.2f"|format(c.similarity_score) }}</span>
+            <span class="cstat">{{ ctx.unique_users | default(0) }} user(s)</span>
+            {% if ctx.off_hours_count %}<span class="cstat cstat-warn">{{ ctx.off_hours_count }} off-hrs</span>{% endif %}
+        </div>
+        <div class="cluster-reason">{{ c.verdict_reason[:80] }}{% if c.verdict_reason|length > 80 %}…{% endif %}</div>
+    </div>
+{% else %}
+    <div class="no-clusters">No clusters in this session.</div>
+{% endfor %}
+</div>
+
+<!-- Cluster detail modal -->
+<div id="clusterModal" class="modal-overlay hidden">
+    <div class="modal modal-xl">
+        <div class="modal-header">
+            <div>
+                <div class="modal-cluster-id" id="modalClusterId"></div>
+                <div class="modal-cluster-fp" id="modalClusterFp"></div>
+            </div>
+            <div class="modal-header-right">
+                <div id="modalVerdict" class="verdict-badge"></div>
+                <button class="modal-close-btn" id="closeModalBtn">✕</button>
+            </div>
+        </div>
+        <div class="modal-body modal-body-scroll">
+            <div class="modal-tabs">
+                <button class="mtab-btn active" data-mtab="overview">Overview</button>
+                <button class="mtab-btn" data-mtab="context">Context Scores</button>
+                <button class="mtab-btn" data-mtab="members">Members</button>
+            </div>
+            <div class="mtab-content active" id="mtab-overview"></div>
+            <div class="mtab-content" id="mtab-context"></div>
+            <div class="mtab-content" id="mtab-members"></div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Verdict filter (static page)
+document.querySelectorAll('.vfilter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const v = btn.getAttribute('data-verdict');
+        document.querySelectorAll('.vfilter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.querySelectorAll('.cluster-card').forEach(card => {
+            const cv = card.getAttribute('data-verdict');
+            card.style.display = (v === 'all' || cv === v) ? '' : 'none';
+        });
+    });
+});
+</script>
+{% endblock %}

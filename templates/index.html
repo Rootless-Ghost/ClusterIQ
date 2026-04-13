@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% block title %}Cluster Alerts{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">
+        <span class="title-icon">🔍</span>
+        Contextual Alert Clustering
+    </h1>
+    <p class="page-subtitle">
+        Group ECS-lite alerts by signal fingerprint, then score each cluster by context to determine escalate / review / suppress.
+    </p>
+</div>
+
+{% if error %}
+<div class="alert alert-error">{{ error }}</div>
+{% endif %}
+
+<!-- Input + config row -->
+<div class="input-grid">
+
+    <!-- Alerts panel -->
+    <div class="card input-card">
+        <div class="card-header">
+            <div class="card-title-row">
+                <h2 class="card-title"><span class="card-title-icon">📋</span> ECS-lite Alerts</h2>
+                <span class="card-hint">from LogNorm / Wazuh</span>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="upload-zone" id="alertsDropZone">
+                <div class="upload-icon">⬆</div>
+                <div class="upload-text">Drop alerts JSON here or</div>
+                <label class="btn btn-secondary btn-sm upload-browse-btn">
+                    Browse File
+                    <input type="file" id="alertsFile" accept=".json,.ndjson" class="hidden-file-input">
+                </label>
+                <div class="upload-hint">JSON array or NDJSON (one event per line)</div>
+            </div>
+            <div class="upload-or">— or paste JSON —</div>
+            <textarea
+                id="alertsJson"
+                class="form-textarea code-textarea"
+                placeholder='[&#10;  {&#10;    "process": { "name": "powershell.exe", "command_line": "powershell -enc JAB..." },&#10;    "event":   { "action": "process_creation", "severity": 3 },&#10;    "user":    { "name": "jsmith" },&#10;    "host":    { "name": "workstation-01" },&#10;    "@timestamp": "2025-01-15T14:32:10Z",&#10;    "tags": ["threat_intel.c2"]&#10;  }&#10;]'
+                rows="14"
+                spellcheck="false"
+            ></textarea>
+            <div id="alertsCounter" class="input-counter">0 alerts loaded</div>
+        </div>
+    </div>
+
+    <!-- Config panel -->
+    <div class="card input-card">
+        <div class="card-header">
+            <h2 class="card-title"><span class="card-title-icon">⚙</span> Clustering Config</h2>
+        </div>
+        <div class="card-body config-panel">
+
+            <div class="config-group">
+                <label class="form-label">Cluster By Fields</label>
+                <div class="field-checkboxes">
+                    <label class="field-check"><input type="checkbox" value="process.name" checked> <span class="check-label">process.name</span></label>
+                    <label class="field-check"><input type="checkbox" value="event.action" checked> <span class="check-label">event.action</span></label>
+                    <label class="field-check"><input type="checkbox" value="network.destination.ip" checked> <span class="check-label">network.destination.ip</span></label>
+                    <label class="field-check"><input type="checkbox" value="process.command_line"> <span class="check-label">process.command_line</span></label>
+                    <label class="field-check"><input type="checkbox" value="user.name"> <span class="check-label">user.name</span></label>
+                    <label class="field-check"><input type="checkbox" value="source.ip"> <span class="check-label">source.ip</span></label>
+                    <label class="field-check"><input type="checkbox" value="destination.port"> <span class="check-label">destination.port</span></label>
+                    <label class="field-check"><input type="checkbox" value="rule.name"> <span class="check-label">rule.name</span></label>
+                    <label class="field-check"><input type="checkbox" value="host.name"> <span class="check-label">host.name</span></label>
+                    <label class="field-check"><input type="checkbox" value="event.code"> <span class="check-label">event.code</span></label>
+                </div>
+                <div class="custom-field-row">
+                    <input type="text" id="customFieldInput" class="form-input" placeholder="Add custom field (e.g. dns.question.name)">
+                    <button class="btn btn-secondary btn-sm" id="addFieldBtn">Add</button>
+                </div>
+                <div id="selectedFields" class="selected-fields-display"></div>
+            </div>
+
+            <div class="config-group">
+                <label class="form-label">
+                    Similarity Threshold
+                    <span class="threshold-val" id="thresholdDisplay">0.75</span>
+                </label>
+                <div class="slider-wrap">
+                    <span class="slider-label">Fuzzy (0.5)</span>
+                    <input type="range" id="thresholdSlider" class="threshold-slider"
+                           min="0.5" max="1.0" step="0.05" value="0.75">
+                    <span class="slider-label">Exact (1.0)</span>
+                </div>
+                <div class="threshold-hint">Higher = stricter grouping (fewer, smaller clusters)</div>
+            </div>
+
+            <div class="config-group">
+                <label class="form-label">Session Label</label>
+                <input type="text" id="sessionLabel" class="form-input"
+                       placeholder="e.g. Monday SOC triage">
+            </div>
+
+            <div class="form-actions config-actions">
+                <button id="clusterBtn" class="btn btn-primary btn-cluster">
+                    <span class="btn-icon">🔍</span> Cluster Alerts
+                </button>
+                <div id="clusterStatus" class="cluster-status hidden">
+                    <div class="spinner"></div>
+                    <span id="clusterStatusText">Clustering…</span>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</div>
+
+<!-- Results -->
+<div id="resultsSection" class="hidden">
+
+    <!-- Summary bar -->
+    <div class="summary-bar card">
+        <div class="summary-stat">
+            <div class="stat-value" id="sumOriginal">—</div>
+            <div class="stat-label">Original Alerts</div>
+        </div>
+        <div class="summary-divider"></div>
+        <div class="summary-stat">
+            <div class="stat-value" id="sumClusters">—</div>
+            <div class="stat-label">Clusters</div>
+        </div>
+        <div class="summary-divider"></div>
+        <div class="summary-stat stat-escalate">
+            <div class="stat-value" id="sumEscalate">—</div>
+            <div class="stat-label">Escalate</div>
+        </div>
+        <div class="summary-divider"></div>
+        <div class="summary-stat stat-review">
+            <div class="stat-value" id="sumReview">—</div>
+            <div class="stat-label">Review</div>
+        </div>
+        <div class="summary-divider"></div>
+        <div class="summary-stat stat-suppressed">
+            <div class="stat-value" id="sumSuppressed">—</div>
+            <div class="stat-label">Suppressed</div>
+        </div>
+        <div class="summary-divider"></div>
+        <div class="summary-stat">
+            <div class="stat-value" id="sumReduction">—</div>
+            <div class="stat-label">Noise Reduction</div>
+        </div>
+        <div class="summary-actions">
+            <button class="btn btn-sm btn-secondary" id="exportJsonBtn">⬇ JSON</button>
+            <button class="btn btn-sm btn-secondary" id="exportMdBtn">⬇ Markdown</button>
+            <a id="viewSessionBtn" href="#" class="btn btn-sm btn-outline hidden">🔗 Full Session</a>
+        </div>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="verdict-filter-bar card">
+        <span class="filter-label">Show:</span>
+        <button class="vfilter-btn active" data-verdict="all">All</button>
+        <button class="vfilter-btn" data-verdict="escalate">🔴 Escalate</button>
+        <button class="vfilter-btn" data-verdict="review">🟡 Review</button>
+        <button class="vfilter-btn" data-verdict="suppressed">⚪ Suppressed</button>
+        <span id="clusterCountDisplay" class="cluster-count-display"></span>
+    </div>
+
+    <!-- Cluster cards grid -->
+    <div id="clusterGrid" class="cluster-grid"></div>
+
+</div>
+
+<!-- Cluster detail modal -->
+<div id="clusterModal" class="modal-overlay hidden">
+    <div class="modal modal-xl">
+        <div class="modal-header">
+            <div>
+                <div class="modal-cluster-id" id="modalClusterId"></div>
+                <div class="modal-cluster-fp" id="modalClusterFp"></div>
+            </div>
+            <div class="modal-header-right">
+                <div id="modalVerdict" class="verdict-badge"></div>
+                <button class="modal-close-btn" id="closeModalBtn">✕</button>
+            </div>
+        </div>
+        <div class="modal-body modal-body-scroll">
+            <div class="modal-tabs">
+                <button class="mtab-btn active" data-mtab="overview">Overview</button>
+                <button class="mtab-btn" data-mtab="context">Context Scores</button>
+                <button class="mtab-btn" data-mtab="members">Members</button>
+            </div>
+            <div class="mtab-content active" id="mtab-overview"></div>
+            <div class="mtab-content" id="mtab-context"></div>
+            <div class="mtab-content" id="mtab-members"></div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Cluster data held in memory for export / modal
+let _lastSession = null;
+</script>
+{% endblock %}
