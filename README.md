@@ -206,4 +206,13 @@ tools:
 
 ## License
 
-MIT — Copyright (c) 2025 Rootless-Ghost. Part of the Nebula Forge security tools suite.
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+
+
+<div align="center">
+
+Built by [Rootless-Ghost](https://github.com/Rootless-Ghost) 
+
+Part of the **Nebula Forge** security tools suite.
+
+</div>
