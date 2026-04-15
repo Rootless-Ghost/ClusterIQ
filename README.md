@@ -25,20 +25,11 @@ a cluster solely because its signals match — context always wins.
 
 ## Screenshots
 
-### Upload & Normalize
 
-![Upload & Normalize](docs/screenshots/upload-normalize.png)
-*Upload view — select source type (Sysmon/WEL/Wazuh/syslog/CEF) and drop your log file*
+![ClusterIQ-Dashboard](docs/screenshots/upload-normalize.png)
 
-### Normalized Records Browser
 
-![Normalized Records Browser](docs/screenshots/records-browser.png)
-*ECS-lite records table with field filtering and pagination*
-
-### ECS-lite Schema Reference
-
-![ECS-lite Schema Reference](docs/screenshots/schema-reference.png)
-*Built-in schema reference page listing all supported ECS-lite fields*
+![Cluster-Generation](docs/screenshots/upload-normalize.png)
 
 ---
 
