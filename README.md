@@ -25,9 +25,11 @@ a cluster solely because its signals match — context always wins.
 
 ## Screenshots
 
+### ClusterIQ-Dashboard
 
-![ClusterIQ-Dashboard](docs/screenshots/upload-normalize.png)
+![ClusterIQ-Dashboard](docs/ClusterIQ-Dashboard.png)
 
+### Cluster-Generation
 
 ![Cluster-Generation](docs/Cluster-Generation.png)
 
