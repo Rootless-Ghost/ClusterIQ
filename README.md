@@ -17,7 +17,7 @@ a cluster solely because its signals match — context always wins.
 
 ## Pipeline Position
 
-![Nebula Forge pipeline — ClusterIQ highlighted](docs/pipeline.svg)
+![Nebula Forge pipeline — ClusterIQ highlighted](docs/Pipeline.svg)
 
 > **purple-loop:** `AtomicLoop → LogNorm → ClusterIQ → DriftWatch → HuntForge → repeat`
 
