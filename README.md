@@ -9,7 +9,7 @@ contextually to determine whether it should be **escalated**, **reviewed**, or
 **suppressed** as noise. Unlike naive deduplication, ClusterIQ never suppresses
 a cluster solely because its signals match — context always wins.
 
-![version](https://img.shields.io/badge/version-v1.0.0-blueviolet?style=flat-square) ![port](https://img.shields.io/badge/port-5006-5d5d5d?style=flat-square) ![python](https://img.shields.io/badge/python-3.10+-3776AB?style=flat-square&logo=python) ![framework](https://img.shields.io/badge/framework-Flask-000000?style=flat-square&logo=flask) ![part%20of](https://img.shields.io/badge/part%20of-Nebula%20Forge-7c3aed?style=flat-square) ![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)
+![version](https://img.shields.io/badge/version-v1.0.0-blueviolet?style=flat-square) ![port](https://img.shields.io/badge/port-5009-5d5d5d?style=flat-square) ![python](https://img.shields.io/badge/python-3.10+-3776AB?style=flat-square&logo=python) ![framework](https://img.shields.io/badge/framework-Flask-000000?style=flat-square&logo=flask) ![part%20of](https://img.shields.io/badge/part%20of-Nebula%20Forge-7c3aed?style=flat-square) ![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 
 </div>
 
@@ -17,7 +17,7 @@ a cluster solely because its signals match — context always wins.
 
 ## Pipeline Position
 
-![Nebula Forge pipeline — LogNorm highlighted](docs/pipeline.svg)
+![Nebula Forge pipeline — ClusterIQ highlighted](docs/pipeline.svg)
 
 > **purple-loop:** `AtomicLoop → LogNorm → ClusterIQ → HuntForge → DriftWatch → repeat`
 
