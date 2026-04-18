@@ -1,82 +1,58 @@
 """
-ClusterIQ — SQLite storage layer for clustering sessions.
+ClusterIQ — PostgreSQL storage layer for clustering sessions.
+
+Schema is managed externally via init-db/. Table expected: clusteriq_sessions
 """
 
 import json
 import logging
-import sqlite3
+import os
 import uuid
 from datetime import datetime
+
+import psycopg2
+import psycopg2.extras
 
 logger = logging.getLogger("clusteriq.storage")
 
 
 class SessionStorage:
-    """Manages the SQLite database for saved clustering sessions."""
 
     def __init__(self, db_path: str = "./clusteriq.db"):
-        self.db_path = db_path
-        self._init_db()
+        self._url = os.environ.get("DATABASE_URL") or db_path
 
-    # ── Connection ─────────────────────────────────────────────────────────────
-
-    def _get_conn(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
-
-    def _init_db(self) -> None:
-        with self._get_conn() as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS sessions (
-                    id                  TEXT PRIMARY KEY,
-                    label               TEXT NOT NULL DEFAULT '',
-                    original_count      INTEGER NOT NULL DEFAULT 0,
-                    cluster_count       INTEGER NOT NULL DEFAULT 0,
-                    suppressed_count    INTEGER NOT NULL DEFAULT 0,
-                    review_count        INTEGER NOT NULL DEFAULT 0,
-                    escalate_count      INTEGER NOT NULL DEFAULT 0,
-                    noise_reduction_pct REAL    NOT NULL DEFAULT 0,
-                    session_json        TEXT    NOT NULL,
-                    created_at          TEXT    NOT NULL
-                )
-            """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_sessions_created
-                ON sessions (created_at)
-            """)
-            conn.commit()
-        logger.info("Storage initialised: %s", self.db_path)
+    def _get_conn(self):
+        return psycopg2.connect(self._url)
 
     # ── Write ──────────────────────────────────────────────────────────────────
 
     def save_session(self, session: dict) -> dict:
-        """Persist a clustering session. Generates a UUID; returns updated session."""
         session_id = str(uuid.uuid4())
         now        = datetime.utcnow().isoformat() + "Z"
 
         with self._get_conn() as conn:
-            conn.execute(
-                """
-                INSERT INTO sessions
-                    (id, label, original_count, cluster_count,
-                     suppressed_count, review_count, escalate_count,
-                     noise_reduction_pct, session_json, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    session_id,
-                    session.get("label", ""),
-                    session.get("original_count", 0),
-                    session.get("cluster_count", 0),
-                    session.get("suppressed_count", 0),
-                    session.get("review_count", 0),
-                    session.get("escalate_count", 0),
-                    session.get("noise_reduction_pct", 0.0),
-                    json.dumps(session),
-                    now,
-                ),
-            )
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO clusteriq_sessions
+                        (id, label, original_count, cluster_count,
+                         suppressed_count, review_count, escalate_count,
+                         noise_reduction_pct, session_json, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        session_id,
+                        session.get("label", ""),
+                        session.get("original_count", 0),
+                        session.get("cluster_count", 0),
+                        session.get("suppressed_count", 0),
+                        session.get("review_count", 0),
+                        session.get("escalate_count", 0),
+                        session.get("noise_reduction_pct", 0.0),
+                        json.dumps(session),
+                        now,
+                    ),
+                )
             conn.commit()
 
         session["id"]         = session_id
@@ -88,9 +64,11 @@ class SessionStorage:
 
     def get_session(self, session_id: str) -> dict | None:
         with self._get_conn() as conn:
-            row = conn.execute(
-                "SELECT * FROM sessions WHERE id = ?", (session_id,)
-            ).fetchone()
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(
+                    "SELECT * FROM clusteriq_sessions WHERE id = %s", (session_id,)
+                )
+                row = cur.fetchone()
         if row is None:
             return None
         data               = json.loads(row["session_json"])
@@ -108,30 +86,31 @@ class SessionStorage:
         params:     list      = []
 
         if search:
-            conditions.append("LOWER(label) LIKE LOWER(?)")
+            conditions.append("LOWER(label) LIKE LOWER(%s)")
             params.append(f"%{search}%")
 
         where  = ("WHERE " + " AND ".join(conditions)) if conditions else ""
         offset = (page - 1) * per_page
 
         with self._get_conn() as conn:
-            total = conn.execute(
-                f"SELECT COUNT(*) FROM sessions {where}", params
-            ).fetchone()[0]
-            rows = conn.execute(
-                f"""
-                SELECT id, label, original_count, cluster_count,
-                       suppressed_count, review_count, escalate_count,
-                       noise_reduction_pct, created_at
-                FROM sessions {where}
-                ORDER BY created_at DESC
-                LIMIT ? OFFSET ?
-                """,
-                params + [per_page, offset],
-            ).fetchall()
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(f"SELECT COUNT(*) FROM clusteriq_sessions {where}", params)
+                total = cur.fetchone()["count"]
+                cur.execute(
+                    f"""
+                    SELECT id, label, original_count, cluster_count,
+                           suppressed_count, review_count, escalate_count,
+                           noise_reduction_pct, created_at
+                    FROM clusteriq_sessions {where}
+                    ORDER BY created_at DESC
+                    LIMIT %s OFFSET %s
+                    """,
+                    params + [per_page, offset],
+                )
+                items = [dict(r) for r in cur.fetchall()]
 
         return {
-            "items":    [dict(r) for r in rows],
+            "items":    items,
             "total":    total,
             "page":     page,
             "per_page": per_page,
@@ -142,12 +121,18 @@ class SessionStorage:
 
     def delete_session(self, session_id: str) -> bool:
         with self._get_conn() as conn:
-            cur = conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM clusteriq_sessions WHERE id = %s", (session_id,)
+                )
+                deleted = cur.rowcount > 0
             conn.commit()
-        return cur.rowcount > 0
+        return deleted
 
     def clear_all(self) -> int:
         with self._get_conn() as conn:
-            cur = conn.execute("DELETE FROM sessions")
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM clusteriq_sessions")
+                count = cur.rowcount
             conn.commit()
-        return cur.rowcount
+        return count
