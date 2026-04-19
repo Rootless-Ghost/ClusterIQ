@@ -76,6 +76,29 @@ Open [http://127.0.0.1:5009](http://127.0.0.1:5009).
 
 ---
 
+## Docker (Nebula Forge suite)
+
+This tool runs as a containerized service in the Nebula Forge suite.
+The recommended way to start everything together:
+
+```bash
+# From the Nebula-Forge repo root
+cp .env.example .env          # add secrets (NVD_API_KEY, ATOMICLOOP_API_KEY, etc.)
+docker compose up -d          # starts all services including clusteriq
+```
+
+**Access:** http://localhost:5009
+
+**Standalone container:**
+```bash
+docker build -t clusteriq .
+docker run -p 5009:5009 \
+  -e DATABASE_URL=postgresql://nebula:changeme@localhost:5432/nebula_forge \
+  clusteriq
+```
+
+---
+
 ## Usage
 
 ### Web UI
