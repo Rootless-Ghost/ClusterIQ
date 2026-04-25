@@ -16,7 +16,7 @@ import logging
 from datetime import datetime, timezone
 
 from .clusterer      import cluster_alerts, DEFAULT_CLUSTER_BY
-from .context_scorer import score_cluster_context
+from .context_scorer import score_cluster_context, _extract_user
 from .verdict        import assign_verdict
 from .storage        import SessionStorage
 
@@ -79,6 +79,12 @@ class ClusterEngine:
         raw_clusters = cluster_alerts(alerts, cluster_by, similarity_threshold)
         avg_size     = n / max(len(raw_clusters), 1)
 
+        session_user_counts: dict[str, int] = {}
+        for a in alerts:
+            u = _extract_user(a)
+            if u:
+                session_user_counts[u] = session_user_counts.get(u, 0) + 1
+
         full_clusters:   list[dict] = []
         suppressed_count = 0
         review_count     = 0
@@ -86,7 +92,7 @@ class ClusterEngine:
 
         for cl in raw_clusters:
             members = cl["members"]
-            ctx     = score_cluster_context(members, alerts, avg_size)
+            ctx     = score_cluster_context(members, alerts, avg_size, session_user_counts)
             verdict, reason, ctx_score = assign_verdict(ctx, cl["similarity_score"])
 
             if verdict == "suppressed":

@@ -156,9 +156,10 @@ def _extract_asset(alert: dict) -> str | None:
 # ── Main scorer ───────────────────────────────────────────────────────────────
 
 def score_cluster_context(
-    members:             list[dict],
-    all_session_alerts:  list[dict],
-    avg_cluster_size:    float,
+    members:              list[dict],
+    all_session_alerts:   list[dict],
+    avg_cluster_size:     float,
+    session_user_counts:  dict[str, int],
 ) -> dict:
     """
     Compute contextual anomaly scores for a cluster.
@@ -202,12 +203,6 @@ def score_cluster_context(
     time_anomaly = round(off_hours / len(known_checks), 3) if known_checks else 0.0
 
     # User anomaly: users that appear rarely across the whole session
-    session_user_counts: dict[str, int] = {}
-    for a in all_session_alerts:
-        u = _extract_user(a)
-        if u:
-            session_user_counts[u] = session_user_counts.get(u, 0) + 1
-
     cluster_users = {_extract_user(m) for m in members} - {None}
     total_session  = len(all_session_alerts) or 1
 
