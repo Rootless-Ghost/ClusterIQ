@@ -13,6 +13,8 @@ a cluster solely because its signals match — context always wins.
 
 </div>
 
+> **Lab-grade tooling.** Built and tested in a home detection-engineering lab. Works as documented, but isn't hardened for production or multi-user deployment. See SECURITY.md for scope.
+
 ---
 
 ## Pipeline Position
